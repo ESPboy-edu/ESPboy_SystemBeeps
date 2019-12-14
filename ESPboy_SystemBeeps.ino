@@ -1,4 +1,6 @@
-//by Shiru 12.12.2019
+//v1.1 14.12.2019 hardware init fix
+//v1.0 12.12.2019 initial version
+//by Shiru
 //shiru@mail.ru
 //https://www.patreon.com/shiru8bit
 
@@ -9,32 +11,32 @@
 
 #include "glcdfont.c"
 
-#include "gfx/espboy.h"
-#include "gfx/title.h"
+#include "gfx\espboy.h"
+#include "gfx\title.h"
 
-#include "mus/aon.h"
-#include "mus/asf.h"
-#include "mus/bad.h"
-#include "mus/btl.h"
-#include "mus/clo.h"
-#include "mus/coy.h"
-#include "mus/dld.h"
-#include "mus/fin.h"
-#include "mus/flo.h"
-#include "mus/hsh.h"
-#include "mus/hst.h"
-#include "mus/led.h"
-#include "mus/mnc.h"
-#include "mus/mym.h"
-#include "mus/pxl.h"
-#include "mus/run.h"
-#include "mus/sqw.h"
-#include "mus/srv.h"
-#include "mus/ssd.h"
-#include "mus/stf.h"
-#include "mus/sys.h"
-#include "mus/tmb.h"
-#include "mus/txr.h"
+#include "mus\aon.h"
+#include "mus\asf.h"
+#include "mus\bad.h"
+#include "mus\btl.h"
+#include "mus\clo.h"
+#include "mus\coy.h"
+#include "mus\dld.h"
+#include "mus\fin.h"
+#include "mus\flo.h"
+#include "mus\hsh.h"
+#include "mus\hst.h"
+#include "mus\led.h"
+#include "mus\mnc.h"
+#include "mus\mym.h"
+#include "mus\pxl.h"
+#include "mus\run.h"
+#include "mus\sqw.h"
+#include "mus\srv.h"
+#include "mus\ssd.h"
+#include "mus\stf.h"
+#include "mus\sys.h"
+#include "mus\tmb.h"
+#include "mus\txr.h"
 
 #define MCP23017address 0 // actually it's 0x20 but in <Adafruit_MCP23017.h> lib there is (x|0x20) :)
 
@@ -509,12 +511,12 @@ void setup()
 
   Serial.begin(115200);
 
-  //disable wifi to safe some battery power
+  //disable wifi to save some battery power
 
   WiFi.mode(WIFI_OFF);
+  WiFi.forceSleepBegin();
 
-
-  //buttons on mcp23017 init
+  //mcp23017 and buttons init, should preceed the TFT init
 
   mcp.begin(MCP23017address);
   delay(100);
@@ -530,13 +532,13 @@ void setup()
   pad_state_t = 0;
 
   //TFT init
+
   mcp.pinMode(csTFTMCP23017pin, OUTPUT);
   mcp.digitalWrite(csTFTMCP23017pin, LOW);
   tft.initR(INITR_144GREENTAB);
   delay(100);
   tft.setRotation(0);
   tft.fillScreen(ST77XX_BLACK);
-
 
   //sound init
 
@@ -673,7 +675,7 @@ void playing_screen()
   while (music_data)
   {
     sx = SPEC_SX;
-    sy = 56;
+    sy = SPEC_SY;
 
     for (i = 0; i < SPEC_BANDS; ++i)
     {
