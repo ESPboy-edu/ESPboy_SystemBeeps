@@ -1,3 +1,4 @@
+//v1.2 14.12.2019 backlight off during startup
 //v1.1 14.12.2019 hardware init fix
 //v1.0 12.12.2019 initial version
 //by Shiru
@@ -5,6 +6,7 @@
 //https://www.patreon.com/shiru8bit
 
 #include <Adafruit_MCP23017.h>
+#include <Adafruit_MCP4725.h>
 #include <Adafruit_ST7735.h>
 #include <Adafruit_GFX.h>
 #include <ESP8266WiFi.h>
@@ -52,6 +54,9 @@
 
 Adafruit_MCP23017 mcp;
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+
+#define MCP4725address 0x60
+Adafruit_MCP4725 dac;
 
 volatile int sound_out;
 volatile int sound_cnt;
@@ -505,62 +510,6 @@ bool title_screen_effect(int out)
 
 
 
-void setup()
-{
-  //serial init
-
-  Serial.begin(115200);
-
-  //disable wifi to save some battery power
-
-  WiFi.mode(WIFI_OFF);
-  WiFi.forceSleepBegin();
-
-  //mcp23017 and buttons init, should preceed the TFT init
-
-  mcp.begin(MCP23017address);
-  delay(100);
-
-  for (int i = 0; i < 8; i++)
-  {
-    mcp.pinMode(i, INPUT);
-    mcp.pullUp(i, HIGH);
-  }
-
-  pad_state = 0;
-  pad_state_prev = 0;
-  pad_state_t = 0;
-
-  //TFT init
-
-  mcp.pinMode(csTFTMCP23017pin, OUTPUT);
-  mcp.digitalWrite(csTFTMCP23017pin, LOW);
-  tft.initR(INITR_144GREENTAB);
-  delay(100);
-  tft.setRotation(0);
-  tft.fillScreen(ST77XX_BLACK);
-
-  //sound init
-
-  pinMode(SOUNDPIN, OUTPUT);
-
-  sound_cnt = 0;
-  sound_load = 0;
-  sound_out = 2;
-  frame_cnt = 0;
-  sound_duration = 0;
-  music_data = NULL;
-
-  noInterrupts();
-  timer1_attachInterrupt(sound_ISR);
-  timer1_enable(TIM_DIV1, TIM_EDGE, TIM_LOOP);
-  timer1_write(ESP.getCpuFreqMHz() * 1000000 / SAMPLE_RATE);
-  interrupts();
-
-  delay(300);
-}
-
-
 void playlist_display(bool cur)
 {
   int i, sy, pos;
@@ -697,6 +646,70 @@ void playing_screen()
   }
 
   music_stop();
+}
+
+
+
+void setup()
+{
+  //serial init
+
+  Serial.begin(115200);
+
+  //disable wifi to save some battery power
+
+  WiFi.mode(WIFI_OFF);
+  WiFi.forceSleepBegin();
+
+  //DAC init, LCD backlit off
+  dac.begin(MCP4725address);
+  delay(100);
+  dac.setVoltage(0, false);
+
+  //mcp23017 and buttons init, should preceed the TFT init
+
+  mcp.begin(MCP23017address);
+  delay(100);
+
+  for (int i = 0; i < 8; i++)
+  {
+    mcp.pinMode(i, INPUT);
+    mcp.pullUp(i, HIGH);
+  }
+
+  pad_state = 0;
+  pad_state_prev = 0;
+  pad_state_t = 0;
+
+  //TFT init
+
+  mcp.pinMode(csTFTMCP23017pin, OUTPUT);
+  mcp.digitalWrite(csTFTMCP23017pin, LOW);
+  tft.initR(INITR_144GREENTAB);
+  delay(100);
+  tft.setRotation(0);
+  tft.fillScreen(ST77XX_BLACK);
+
+  //sound init
+
+  pinMode(SOUNDPIN, OUTPUT);
+
+  sound_cnt = 0;
+  sound_load = 0;
+  sound_out = 2;
+  frame_cnt = 0;
+  sound_duration = 0;
+  music_data = NULL;
+
+  noInterrupts();
+  timer1_attachInterrupt(sound_ISR);
+  timer1_enable(TIM_DIV1, TIM_EDGE, TIM_LOOP);
+  timer1_write(ESP.getCpuFreqMHz() * 1000000 / SAMPLE_RATE);
+  interrupts();
+
+  dac.setVoltage(4095, true);
+
+  delay(300);
 }
 
 
