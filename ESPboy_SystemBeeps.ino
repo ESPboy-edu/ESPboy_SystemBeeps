@@ -1,3 +1,4 @@
+//v1.3 29.04.2020 change <Adafruit_ST7735.h> to <TFT_eSPI.h> + add ESPboy App store support
 //v1.2 14.12.2019 backlight off during startup
 //v1.1 14.12.2019 hardware init fix
 //v1.0 12.12.2019 initial version
@@ -7,40 +8,43 @@
 
 #include <Adafruit_MCP23017.h>
 #include <Adafruit_MCP4725.h>
-#include <Adafruit_ST7735.h>
-#include <Adafruit_GFX.h>
+#include <TFT_eSPI.h>
 #include <ESP8266WiFi.h>
+#include "ESPboyOTA.h"
 
 #include "glcdfont.c"
 
-#include "gfx\espboy.h"
-#include "gfx\title.h"
+#include "gfx/espboy.h"
+#include "gfx/title.h"
 
-#include "mus\aon.h"
-#include "mus\asf.h"
-#include "mus\bad.h"
-#include "mus\btl.h"
-#include "mus\clo.h"
-#include "mus\coy.h"
-#include "mus\dld.h"
-#include "mus\fin.h"
-#include "mus\flo.h"
-#include "mus\hsh.h"
-#include "mus\hst.h"
-#include "mus\led.h"
-#include "mus\mnc.h"
-#include "mus\mym.h"
-#include "mus\pxl.h"
-#include "mus\run.h"
-#include "mus\sqw.h"
-#include "mus\srv.h"
-#include "mus\ssd.h"
-#include "mus\stf.h"
-#include "mus\sys.h"
-#include "mus\tmb.h"
-#include "mus\txr.h"
+#include "mus/aon.h"
+#include "mus/asf.h"
+#include "mus/bad.h"
+#include "mus/btl.h"
+#include "mus/clo.h"
+#include "mus/coy.h"
+#include "mus/dld.h"
+#include "mus/fin.h"
+#include "mus/flo.h"
+#include "mus/hsh.h"
+#include "mus/hst.h"
+#include "mus/led.h"
+#include "mus/mnc.h"
+#include "mus/mym.h"
+#include "mus/pxl.h"
+#include "mus/run.h"
+#include "mus/sqw.h"
+#include "mus/srv.h"
+#include "mus/ssd.h"
+#include "mus/stf.h"
+#include "mus/sys.h"
+#include "mus/tmb.h"
+#include "mus/txr.h"
+
+#define LHSWAP(w)         ( ((w)>>8) | ((w)<<8) )
 
 #define MCP23017address 0 // actually it's 0x20 but in <Adafruit_MCP23017.h> lib there is (x|0x20) :)
+
 
 //PINS
 #define LEDPIN         D4
@@ -48,15 +52,16 @@
 
 //SPI for LCD
 #define csTFTMCP23017pin 8
-#define TFT_RST       -1
-#define TFT_DC        D8
-#define TFT_CS        -1
 
 Adafruit_MCP23017 mcp;
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+TFT_eSPI tft = TFT_eSPI();
+ESPboyOTA* OTAobj = NULL;
+
+uint8_t getOTAkeys() { return (~mcp.readGPIOAB() & 255); }
 
 #define MCP4725address 0x60
 Adafruit_MCP4725 dac;
+
 
 volatile int sound_out;
 volatile int sound_cnt;
@@ -130,7 +135,7 @@ int playlist_cur;
 
 volatile int spec_levels[SPEC_BANDS];
 
-
+uint8_t getOTAKeys() { return (~mcp.readGPIOAB() & 255); }
 
 int check_key()
 {
@@ -350,10 +355,10 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
       {
         col = pgm_read_byte(&bitmap[off++]);
         rgb = pgm_read_dword(&bitmap[54 + col * 4]);
-        buf[j] = ((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8);
+        buf[j] = LHSWAP(((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8));
       }
 
-      tft.drawRGBBitmap(x, y + i, buf, w, 1);
+      tft.pushImage(x, y+i, w, 1, buf);
     }
   }
   else
@@ -366,11 +371,11 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
       {
         col = pgm_read_byte(&bitmap[off]);
         rgb = pgm_read_dword(&bitmap[54 + col * 4]);
-        buf[j] = ((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8);
+        buf[j] = LHSWAP(((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8));
         off -= wa;
       }
 
-      tft.drawRGBBitmap(x + i, y, buf, 1, h);
+     tft.pushImage(x+i, y, 1, h, buf);
     }
   }
 }
@@ -388,12 +393,12 @@ void drawCharFast(int x, int y, int c, int16_t color, int16_t bg)
 
     for (j = 0; j < 8; ++j)
     {
-      buf[j * 5 + i] = (line & 1) ? color : bg;
+      buf[j * 5 + i] = LHSWAP((line & 1) ? color : bg);
       line >>= 1;
     }
   }
-
-  tft.drawRGBBitmap(x, y, buf, 5, 8);
+  
+  tft.pushImage(x, y, 5, 8, buf);
 }
 
 
@@ -523,11 +528,11 @@ void playlist_display(bool cur)
 
   for (i = 0; i < PLAYLIST_HEIGHT; ++i)
   {
-    drawCharFast(2, sy, ' ', ST77XX_WHITE, ST77XX_BLACK);
+    drawCharFast(2, sy, ' ', TFT_WHITE, TFT_BLACK);
 
-    printFast(4, sy, (char*)playlist[pos * 2], (playlist[pos * 2][0] == ' ') ? ST77XX_WHITE : ST77XX_YELLOW);
+    printFast(4, sy, (char*)playlist[pos * 2], (playlist[pos * 2][0] == ' ') ? TFT_WHITE : TFT_YELLOW);
 
-    if ((pos == playlist_cur) && cur) drawCharFast(2, sy, 0xdb, ST77XX_WHITE, ST77XX_BLACK);
+    if ((pos == playlist_cur) && cur) drawCharFast(2, sy, 0xdb, TFT_WHITE, TFT_BLACK);
 
     ++pos;
 
@@ -559,7 +564,7 @@ void playlist_screen()
 
   set_speaker(0, 0);
 
-  tft.fillScreen(ST77XX_BLACK);
+  tft.fillScreen(TFT_BLACK);
 
   change = true;
   frame = 0;
@@ -606,16 +611,16 @@ void playing_screen()
 
   for (i = 0; i < SPEC_BANDS; ++i) spec_levels[i] = 0;
 
-  tft.fillScreen(ST77XX_BLACK);
+  tft.fillScreen(TFT_BLACK);
 
-  printFast(4, 16, "Now playing...", ST77XX_YELLOW);
-  printFast(4, 24, (char*)playlist[playlist_cur * 2], ST77XX_WHITE);
+  printFast(4, 16, "Now playing...", TFT_YELLOW);
+  printFast(4, 24, (char*)playlist[playlist_cur * 2], TFT_WHITE);
 
   sx = SPEC_SX;
 
   for (i = 0; i < SPEC_BANDS; ++i)
   {
-    tft.fillRect(sx, SPEC_SY + SPEC_HEIGHT + 1, SPEC_BAND_WIDTH - 1, 1, ST77XX_WHITE);
+    tft.fillRect(sx, SPEC_SY + SPEC_HEIGHT + 1, SPEC_BAND_WIDTH - 1, 1, TFT_WHITE);
     sx += SPEC_BAND_WIDTH;
   }
 
@@ -632,8 +637,8 @@ void playing_screen()
 
       if (h > SPEC_HEIGHT) h = SPEC_HEIGHT;
 
-      tft.fillRect(sx, sy, 5, SPEC_HEIGHT - h, ST77XX_BLACK);
-      tft.fillRect(sx, sy + SPEC_HEIGHT - h, SPEC_BAND_WIDTH - 1, h, ST77XX_GREEN);
+      tft.fillRect(sx, sy, 5, SPEC_HEIGHT - h, TFT_BLACK);
+      tft.fillRect(sx, sy + SPEC_HEIGHT - h, SPEC_BAND_WIDTH - 1, h, TFT_GREEN);
 
       sx += SPEC_BAND_WIDTH;
     }
@@ -656,10 +661,8 @@ void setup()
 
   Serial.begin(115200);
 
-  //disable wifi to save some battery power
-
-  WiFi.mode(WIFI_OFF);
-  WiFi.forceSleepBegin();
+  //setup cpu freq
+  ets_update_cpu_frequency(80);
 
   //DAC init, LCD backlit off
   dac.begin(MCP4725address);
@@ -685,10 +688,10 @@ void setup()
 
   mcp.pinMode(csTFTMCP23017pin, OUTPUT);
   mcp.digitalWrite(csTFTMCP23017pin, LOW);
-  tft.initR(INITR_144GREENTAB);
+  tft.begin();
   delay(100);
   tft.setRotation(0);
-  tft.fillScreen(ST77XX_BLACK);
+  tft.fillScreen(TFT_BLACK);
 
   //sound init
 
@@ -708,8 +711,12 @@ void setup()
   interrupts();
 
   dac.setVoltage(4095, true);
-
   delay(300);
+
+  // check OTA
+  if (getOTAkeys()&PAD_A || getOTAkeys()&PAD_B) OTAobj = new ESPboyOTA(&tft, &mcp);
+  
+  WiFi.mode(WIFI_OFF);
 }
 
 
