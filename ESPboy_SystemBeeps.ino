@@ -685,7 +685,6 @@ void setup()
   pad_state_t = 0;
 
   //TFT init
-
   mcp.pinMode(csTFTMCP23017pin, OUTPUT);
   mcp.digitalWrite(csTFTMCP23017pin, LOW);
   tft.begin();
@@ -704,19 +703,19 @@ void setup()
   sound_duration = 0;
   music_data = NULL;
 
+  dac.setVoltage(4095, true);
+  delay(300);
+  
+  // check OTA
+  if (getOTAkeys()&PAD_A || getOTAkeys()&PAD_B) OTAobj = new ESPboyOTA(&tft, &mcp);
+  WiFi.mode(WIFI_OFF);  
+
   noInterrupts();
   timer1_attachInterrupt(sound_ISR);
   timer1_enable(TIM_DIV1, TIM_EDGE, TIM_LOOP);
   timer1_write(ESP.getCpuFreqMHz() * 1000000 / SAMPLE_RATE);
   interrupts();
 
-  dac.setVoltage(4095, true);
-  delay(300);
-
-  // check OTA
-  if (getOTAkeys()&PAD_A || getOTAkeys()&PAD_B) OTAobj = new ESPboyOTA(&tft, &mcp);
-  
-  WiFi.mode(WIFI_OFF);
 }
 
 
