@@ -10,7 +10,6 @@
 #include <Adafruit_MCP4725.h>
 #include <TFT_eSPI.h>
 #include <ESP8266WiFi.h>
-#include "ESPboyOTA.h"
 
 #include "glcdfont.c"
 
@@ -55,9 +54,7 @@
 
 Adafruit_MCP23017 mcp;
 TFT_eSPI tft = TFT_eSPI();
-ESPboyOTA* OTAobj = NULL;
 
-uint8_t getOTAkeys() { return (~mcp.readGPIOAB() & 255); }
 
 #define MCP4725address 0x60
 Adafruit_MCP4725 dac;
@@ -135,7 +132,6 @@ int playlist_cur;
 
 volatile int spec_levels[SPEC_BANDS];
 
-uint8_t getOTAKeys() { return (~mcp.readGPIOAB() & 255); }
 
 int check_key()
 {
@@ -706,8 +702,6 @@ void setup()
   dac.setVoltage(4095, true);
   delay(300);
   
-  // check OTA
-  if (getOTAkeys()&PAD_A || getOTAkeys()&PAD_B) OTAobj = new ESPboyOTA(&tft, &mcp);
   WiFi.mode(WIFI_OFF);  
 
   noInterrupts();
