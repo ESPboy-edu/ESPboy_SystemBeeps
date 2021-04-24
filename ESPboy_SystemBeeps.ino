@@ -1,3 +1,4 @@
+//v1.4 25.04.2021 code refactoring
 //v1.3 29.04.2020 change <Adafruit_ST7735.h> to <TFT_eSPI.h> + add ESPboy App store support
 //v1.2 14.12.2019 backlight off during startup
 //v1.1 14.12.2019 hardware init fix
@@ -6,10 +7,8 @@
 //shiru@mail.ru
 //https://www.patreon.com/shiru8bit
 
-#include <Adafruit_MCP23017.h>
-#include <Adafruit_MCP4725.h>
-#include <TFT_eSPI.h>
-#include <ESP8266WiFi.h>
+#include "ESPboyInit.h"
+
 
 #include "glcdfont.c"
 
@@ -40,26 +39,6 @@
 #include "mus/tmb.h"
 #include "mus/txr.h"
 
-#define LHSWAP(w)         ( ((w)>>8) | ((w)<<8) )
-
-#define MCP23017address 0 // actually it's 0x20 but in <Adafruit_MCP23017.h> lib there is (x|0x20) :)
-
-
-//PINS
-#define LEDPIN         D4
-#define SOUNDPIN       D3
-
-//SPI for LCD
-#define csTFTMCP23017pin 8
-
-Adafruit_MCP23017 mcp;
-TFT_eSPI tft = TFT_eSPI();
-
-
-#define MCP4725address 0x60
-Adafruit_MCP4725 dac;
-
-
 volatile int sound_out;
 volatile int sound_cnt;
 volatile int sound_load;
@@ -71,22 +50,13 @@ volatile int music_ptr;
 volatile int music_wait;
 volatile int music_period;
 
-int pad_state;
-int pad_state_prev;
-int pad_state_t;
+ESPboyInit myESPboy;
 
 #define PIT_CLOCK       1193180
 
 #define SAMPLE_RATE     96000
 #define FRAME_RATE      120
 
-#define PAD_LEFT        0x01
-#define PAD_UP          0x02
-#define PAD_DOWN        0x04
-#define PAD_RIGHT       0x08
-#define PAD_A           0x10
-#define PAD_B           0x20
-#define PAD_ANY         (PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A|PAD_B)
 
 #define PLAYLIST_HEIGHT 15
 #define PLAYLIST_LEN    26
@@ -133,46 +103,30 @@ int playlist_cur;
 volatile int spec_levels[SPEC_BANDS];
 
 
-int check_key()
-{
-  pad_state_prev = pad_state;
-  pad_state = 0;
-
-  for (int i = 0; i < 8; i++)
-  {
-    if (!mcp.digitalRead(i)) pad_state |= (1 << i);
+uint8_t checkKey(){
+  static uint8_t keysGet, prevKeys;
+  keysGet = myESPboy.getKeys();
+  if (prevKeys == keysGet) return(0);
+  else {
+    prevKeys = keysGet;
+    return (keysGet);
   }
-
-  pad_state_t = pad_state ^ pad_state_prev & pad_state;
-
-  return pad_state;
-}
-
+};
 
 
 //0 no timeout, otherwise timeout in ms
 
-void wait_any_key(int timeout)
-{
+void wait_any_key(int timeout){
   timeout /= 100;
-
-  while (1)
-  {
-    check_key();
-
-    if (pad_state_t&PAD_ANY) break;
-
-    if (timeout)
-    {
+  while (1){
+    if (myESPboy.getKeys()) break;
+    if (timeout){
       --timeout;
-
       if (timeout <= 0) break;
     }
-
     delay(100);
   }
 }
-
 
 
 void spec_add()
@@ -351,10 +305,10 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
       {
         col = pgm_read_byte(&bitmap[off++]);
         rgb = pgm_read_dword(&bitmap[54 + col * 4]);
-        buf[j] = LHSWAP(((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8));
+        buf[j] = (((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8));
       }
 
-      tft.pushImage(x, y+i, w, 1, buf);
+      myESPboy.tft.pushImage(x, y+i, w, 1, buf);
     }
   }
   else
@@ -367,11 +321,11 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
       {
         col = pgm_read_byte(&bitmap[off]);
         rgb = pgm_read_dword(&bitmap[54 + col * 4]);
-        buf[j] = LHSWAP(((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8));
+        buf[j] = (((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8));
         off -= wa;
       }
 
-     tft.pushImage(x+i, y, 1, h, buf);
+     myESPboy.tft.pushImage(x+i, y, 1, h, buf);
     }
   }
 }
@@ -389,12 +343,12 @@ void drawCharFast(int x, int y, int c, int16_t color, int16_t bg)
 
     for (j = 0; j < 8; ++j)
     {
-      buf[j * 5 + i] = LHSWAP((line & 1) ? color : bg);
+      buf[j * 5 + i] = ((line & 1) ? color : bg);
       line >>= 1;
     }
   }
   
-  tft.pushImage(x, y, 5, 8, buf);
+  myESPboy.tft.pushImage(x, y, 5, 8, buf);
 }
 
 
@@ -428,7 +382,7 @@ bool espboy_logo_effect(int out)
 
   for (anim = 0; anim < st; ++anim)
   {
-    if (check_key()&PAD_ANY) return false;
+    if (checkKey()) return false;
 
     if (!out) set_speaker(200 + anim * 50, 5);
 
@@ -483,7 +437,7 @@ bool title_screen_effect(int out)
 
   while (i < 32 * 32)
   {
-    if (check_key()&PAD_ANY) return false;
+    if (checkKey()) return false;
 
     set_speaker(500 + i + (rand() & 511), !out ? 4 : 1);
 
@@ -499,7 +453,7 @@ bool title_screen_effect(int out)
       }
       else
       {
-        tft.fillRect(x, y, 4, 4, ST7735_BLACK);
+        myESPboy.tft.fillRect(x, y, 4, 4, ST7735_BLACK);
       }
     }
 
@@ -557,44 +511,27 @@ void playlist_screen()
 {
   bool change;
   int frame;
+  uint8_t keyState;
 
   set_speaker(0, 0);
 
-  tft.fillScreen(TFT_BLACK);
+  myESPboy.tft.fillScreen(TFT_BLACK);
 
   change = true;
   frame = 0;
 
-  while (1)
-  {
-    if (change)
-    {
+  while (1){
+    if (change){
       playlist_display((frame & 32) ? true : false);
       change = false;
     }
 
-    check_key();
-
-    if (pad_state_t & PAD_UP)
-    {
-      playlist_move(-1);
-      change = true;
-      frame = 32;
-    }
-
-    if (pad_state_t & PAD_DOWN)
-    {
-      playlist_move(1);
-      change = true;
-      frame = 32;
-    }
-
-    if (pad_state_t & (PAD_A | PAD_B)) break;
-
-    delay(1);
-
+    keyState = checkKey();
+    if (keyState & PAD_UP) playlist_move(-1);
+    if (keyState & PAD_DOWN) playlist_move(1);
+    if (keyState  & (PAD_ACT | PAD_ESC)) break;
+    delay(5);
     ++frame;
-
     if (!(frame & 31)) change = true;
   }
 }
@@ -607,7 +544,7 @@ void playing_screen()
 
   for (i = 0; i < SPEC_BANDS; ++i) spec_levels[i] = 0;
 
-  tft.fillScreen(TFT_BLACK);
+  myESPboy.tft.fillScreen(TFT_BLACK);
 
   printFast(4, 16, "Now playing...", TFT_YELLOW);
   printFast(4, 24, (char*)playlist[playlist_cur * 2], TFT_WHITE);
@@ -616,7 +553,7 @@ void playing_screen()
 
   for (i = 0; i < SPEC_BANDS; ++i)
   {
-    tft.fillRect(sx, SPEC_SY + SPEC_HEIGHT + 1, SPEC_BAND_WIDTH - 1, 1, TFT_WHITE);
+    myESPboy.tft.fillRect(sx, SPEC_SY + SPEC_HEIGHT + 1, SPEC_BAND_WIDTH - 1, 1, TFT_WHITE);
     sx += SPEC_BAND_WIDTH;
   }
 
@@ -633,15 +570,14 @@ void playing_screen()
 
       if (h > SPEC_HEIGHT) h = SPEC_HEIGHT;
 
-      tft.fillRect(sx, sy, 5, SPEC_HEIGHT - h, TFT_BLACK);
-      tft.fillRect(sx, sy + SPEC_HEIGHT - h, SPEC_BAND_WIDTH - 1, h, TFT_GREEN);
+      myESPboy.tft.fillRect(sx, sy, 5, SPEC_HEIGHT - h, TFT_BLACK);
+      myESPboy.tft.fillRect(sx, sy + SPEC_HEIGHT - h, SPEC_BAND_WIDTH - 1, h, TFT_GREEN);
 
       sx += SPEC_BAND_WIDTH;
     }
 
-    check_key();
 
-    if (pad_state_t) break;
+    if (checkKey()) break;
 
     delay(1000 / 120);
   }
@@ -651,46 +587,14 @@ void playing_screen()
 
 
 
-void setup()
-{
-  //serial init
-
-  Serial.begin(115200);
+void setup(){
 
   //setup cpu freq
   ets_update_cpu_frequency(80);
 
-  //DAC init, LCD backlit off
-  dac.begin(MCP4725address);
-  delay(100);
-  dac.setVoltage(0, false);
-
-  //mcp23017 and buttons init, should preceed the TFT init
-
-  mcp.begin(MCP23017address);
-  delay(100);
-
-  for (int i = 0; i < 8; i++)
-  {
-    mcp.pinMode(i, INPUT);
-    mcp.pullUp(i, HIGH);
-  }
-
-  pad_state = 0;
-  pad_state_prev = 0;
-  pad_state_t = 0;
-
-  //TFT init
-  mcp.pinMode(csTFTMCP23017pin, OUTPUT);
-  mcp.digitalWrite(csTFTMCP23017pin, LOW);
-  tft.begin();
-  delay(100);
-  tft.setRotation(0);
-  tft.fillScreen(TFT_BLACK);
-
-  //sound init
-
-  pinMode(SOUNDPIN, OUTPUT);
+  //Init ESPboy
+  myESPboy.begin(((String)F("System beeps")).c_str());
+  
 
   sound_cnt = 0;
   sound_load = 0;
@@ -699,23 +603,16 @@ void setup()
   sound_duration = 0;
   music_data = NULL;
 
-  dac.setVoltage(4095, true);
-  delay(300);
-  
-  WiFi.mode(WIFI_OFF);  
-
   noInterrupts();
   timer1_attachInterrupt(sound_ISR);
   timer1_enable(TIM_DIV1, TIM_EDGE, TIM_LOOP);
   timer1_write(ESP.getCpuFreqMHz() * 1000000 / SAMPLE_RATE);
   interrupts();
-
 }
 
 
 
-void loop()
-{
+void loop(){
   playlist_cur = 1;
 
   //logo and title screen (skippable)
