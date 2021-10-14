@@ -1,3 +1,4 @@
+//v1.5 14.10.2021 minor fixes to compile in the lastest SDK, 80/160 MHz does not matter now
 //v1.4 25.04.2021 code refactoring
 //v1.3 29.04.2020 change <Adafruit_ST7735.h> to <TFT_eSPI.h> + add ESPboy App store support
 //v1.2 14.12.2019 backlight off during startup
@@ -244,7 +245,7 @@ void music_update()
 
 
 
-void ICACHE_RAM_ATTR sound_ISR()
+void IRAM_ATTR sound_ISR()
 {
   if (sound_out)
   {
@@ -453,7 +454,7 @@ bool title_screen_effect(int out)
       }
       else
       {
-        myESPboy.tft.fillRect(x, y, 4, 4, ST7735_BLACK);
+        myESPboy.tft.fillRect(x, y, 4, 4, TFT_BLACK);
       }
     }
 
@@ -546,7 +547,7 @@ void playing_screen()
 
   myESPboy.tft.fillScreen(TFT_BLACK);
 
-  printFast(4, 16, "Now playing...", TFT_YELLOW);
+  printFast(4, 16, (char*)"Now playing...", TFT_YELLOW);
   printFast(4, 24, (char*)playlist[playlist_cur * 2], TFT_WHITE);
 
   sx = SPEC_SX;
@@ -589,12 +590,9 @@ void playing_screen()
 
 void setup(){
 
-  //setup cpu freq
-  ets_update_cpu_frequency(80);
-
   //Init ESPboy
-  myESPboy.begin(((String)F("System beeps")).c_str());
   
+  myESPboy.begin(((String)F("System beeps")).c_str());
 
   sound_cnt = 0;
   sound_load = 0;
@@ -606,7 +604,7 @@ void setup(){
   noInterrupts();
   timer1_attachInterrupt(sound_ISR);
   timer1_enable(TIM_DIV1, TIM_EDGE, TIM_LOOP);
-  timer1_write(ESP.getCpuFreqMHz() * 1000000 / SAMPLE_RATE);
+  timer1_write(80000000 / SAMPLE_RATE);
   interrupts();
 }
 
